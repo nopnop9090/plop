@@ -1,0 +1,14 @@
+# Rust
+/target/
+Cargo.lock.orig
+
+# Extracted game assets & analysis (local only!)
+/analyze/
+
+# Logs
+*.log
+plop_debug.log
+
+# OS
+Thumbs.db
+desktop.ini

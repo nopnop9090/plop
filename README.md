@@ -43,7 +43,8 @@ pwsh -File tools\plop_ctl.ps1 version
 
 ## Ressourcen
 
-- Eine einzelne `plop.exe` (~300 KB, keine Abhängigkeiten)
+- Eine einzelne `plop.exe` (~1.4 MB statisch gelinkt inkl. 4 WAV-Sounds,
+  keine externen Abhängigkeiten)
 - Idle: ~15–20 MB RAM, keine Disk-I/O
 
 ## Verhalten

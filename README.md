@@ -26,6 +26,21 @@ Tray-Icon (Konfetti-Punkte):
   - `Test-Pop` — Effekt am Cursor testen
   - `Beenden`
 
+## Fernsteuerung (IPC)
+
+Externe Programme können Status abfragen und alles umschalten — per
+`WM_USER`-Nachrichten an das Fenster `PlopTrayHost`. Protokoll-Doku:
+**[docs/IPC.md](docs/IPC.md)**. Fertiges CLI:
+
+```
+pwsh -File tools\plop_ctl.ps1 status
+pwsh -File tools\plop_ctl.ps1 enable 0   # Pops aus
+pwsh -File tools\plop_ctl.ps1 sound 0    # Ton aus, Konfetti bleibt
+pwsh -File tools\plop_ctl.ps1 minanim 1  # Minimier-Animation aus
+pwsh -File tools\plop_ctl.ps1 test       # Test-Pop am Cursor
+pwsh -File tools\plop_ctl.ps1 version
+```
+
 ## Ressourcen
 
 - Eine einzelne `plop.exe` (~300 KB, keine Abhängigkeiten)

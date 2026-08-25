@@ -9,18 +9,32 @@ use windows::Win32::UI::Shell::{
     NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreateIconIndirect, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
-    DestroyMenu, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW, LoadCursorW,
-    LoadImageW, PostMessageW, PostQuitMessage, RegisterClassW, SetForegroundWindow, ShowWindow,
-    TranslateMessage,
-    TrackPopupMenuEx, HICON, HMENU, ICONINFO, IDC_ARROW, IDI_APPLICATION, IMAGE_ICON,
-    LR_DEFAULTCOLOR, MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG, SW_HIDE, TPM_NONOTIFY,
-    TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_DESTROY, WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    AppendMenuW, ChangeWindowMessageFilterEx, CreateIconIndirect, CreatePopupMenu,
+    CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW, GetCursorPos,
+    GetMessageW, LoadCursorW, LoadImageW, MSGFLT_ALLOW, PostMessageW, PostQuitMessage,
+    RegisterClassW, SetForegroundWindow, ShowWindow, TranslateMessage, TrackPopupMenuEx, HICON,
+    HMENU, ICONINFO, IDC_ARROW, IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTCOLOR, MF_CHECKED,
+    MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG, SW_HIDE, TPM_NONOTIFY, TPM_RETURNCMD,
+    TPM_RIGHTBUTTON, WM_DESTROY, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 use crate::confetti;
 use crate::sound;
 use crate::ENABLED;
+
+// ---- IPC protocol (WM_USER based, see docs/IPC.md) --------------------
+const PM_PING: u32 = 0x0400; // WM_USER + 0
+const PM_GET_STATE: u32 = 0x0400 + 1;
+const PM_SET_ENABLED: u32 = 0x0400 + 2;
+const PM_SET_SOUND: u32 = 0x0400 + 3;
+const PM_SET_MINANIM: u32 = 0x0400 + 4;
+const PM_TEST_POP: u32 = 0x0400 + 5;
+const PM_GET_VERSION: u32 = 0x0400 + 6;
+const PM_MAGIC: usize = 0x504C_4F50; // 'PLOP'
+
+const PMF_ENABLED: u32 = 0x1;
+const PMF_SOUND: u32 = 0x2;
+const PMF_MINANIM_OFF: u32 = 0x4;
 
 const ID_VERSION: isize = 0;
 const ID_TOGGLE: isize = 100;
@@ -63,6 +77,7 @@ pub fn run() {
         let _ = ShowWindow(hwnd, SW_HIDE);
 
         add_tray_icon(hwnd);
+        allow_ipc_messages(hwnd);
 
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
@@ -176,6 +191,9 @@ unsafe extern "system" fn tray_wndproc(
     lparam: LPARAM,
 ) -> LRESULT {
     unsafe {
+        if (0x0400..=0x0410).contains(&msg) {
+            return handle_ipc(msg, wparam);
+        }
         if msg == CALLBACK_MSG {
             let mouse = (lparam.0 & 0xFFFF) as u32;
             if mouse == WM_LBUTTONUP {
@@ -196,6 +214,72 @@ unsafe extern "system" fn tray_wndproc(
             return LRESULT(0);
         }
         DefWindowProcW(hwnd, msg, wparam, lparam)
+    }
+}
+
+/// External control interface: any process can FindWindowW("PlopTrayHost")
+/// and SendMessage the PM_* messages (docs/IPC.md).
+unsafe fn handle_ipc(msg: u32, wparam: WPARAM) -> LRESULT {
+    unsafe {
+        match msg {
+            PM_PING => LRESULT(PM_MAGIC as isize),
+            PM_GET_STATE => {
+                let mut st = 0u32;
+                if crate::enabled() {
+                    st |= PMF_ENABLED;
+                }
+                if crate::sound_enabled() {
+                    st |= PMF_SOUND;
+                }
+                if crate::minanim::is_active() {
+                    st |= PMF_MINANIM_OFF;
+                }
+                LRESULT(st as isize)
+            }
+            PM_SET_ENABLED => {
+                let prev = crate::enabled() as isize;
+                crate::ENABLED.store(wparam.0 != 0, Ordering::Relaxed);
+                LRESULT(prev)
+            }
+            PM_SET_SOUND => {
+                let prev = crate::sound_enabled() as isize;
+                crate::SOUND_ENABLED.store(wparam.0 != 0, Ordering::Relaxed);
+                LRESULT(prev)
+            }
+            PM_SET_MINANIM => {
+                let prev = crate::minanim::is_active() as isize;
+                crate::minanim::set_enabled(wparam.0 != 0);
+                LRESULT(prev)
+            }
+            PM_TEST_POP => {
+                test_pop();
+                LRESULT(1)
+            }
+            PM_GET_VERSION => {
+                let major: u32 = env!("PLOP_MAJOR").parse().unwrap_or(0);
+                let minor: u32 = env!("PLOP_MINOR").parse().unwrap_or(0);
+                let build: u32 = env!("PLOP_BUILD_NO").parse().unwrap_or(0);
+                LRESULT((((major << 24) | (minor << 16) | (build & 0xFFFF)) as u32) as isize)
+            }
+            _ => LRESULT(0),
+        }
+    }
+}
+
+/// Allow these messages even if plop ever runs elevated (UIPI).
+unsafe fn allow_ipc_messages(hwnd: HWND) {
+    unsafe {
+        for m in [
+            PM_PING,
+            PM_GET_STATE,
+            PM_SET_ENABLED,
+            PM_SET_SOUND,
+            PM_SET_MINANIM,
+            PM_TEST_POP,
+            PM_GET_VERSION,
+        ] {
+            let _ = ChangeWindowMessageFilterEx(hwnd, m, MSGFLT_ALLOW, None);
+        }
     }
 }
 

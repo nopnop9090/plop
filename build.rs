@@ -20,7 +20,9 @@ fn main() {
     );
     let date_code = format!("{:02}{:02}{:02}", y % 100, m, d);
 
-    println!("cargo:rustc-env=PLOP_VERSION=1.0");
+    println!("cargo:rustc-env=PLOP_VERSION=1.1");
+    println!("cargo:rustc-env=PLOP_MAJOR=1");
+    println!("cargo:rustc-env=PLOP_MINOR=1");
     println!("cargo:rustc-env=PLOP_DATE_CODE={date_code}");
     println!("cargo:rustc-env=PLOP_BUILD_NO={counter}");
 }
